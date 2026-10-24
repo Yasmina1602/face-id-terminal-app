@@ -70,28 +70,139 @@ Tizim modulli, mustaqil va mikro-servis arxitekturasi asosida qurilgan:
 
 ---
 
-## 🚀 Ishga Tushirish Ketma-Ketligi
+## 📁 Konfiguratsiya Fayllari (`.env`)
 
-Loyihani to'g'ri ishga tushirish uchun quyidagi ketma-ketlikda amallarni bajaring:
+Loyiha xavfsizligi yuzasidan shaxsiy parollar va tokenlar Git omboriga yuklanmaydi. Loyihani yuklab olgan kishi quyidagi `.env` fayllarini namunalardan nusxa olib yaratishi kerak.
 
-### 1-qadam: Ma'lumotlar bazasini tayyorlash
-
-PostgreSQL serveringiz ishlayotganligiga ishonch hosil qiling, so'ng loyiha ildizida quyidagi buyruqni bering:
+### 1. Telegram Bot uchun: `telegram_bot/.env`
+Namunadan nusxa ko'chirish:
 ```powershell
-python apply_schema.py
+# Windows PowerShell:
+Copy-Item telegram_bot\env.example telegram_bot\.env
+
+# Linux / Mac:
+cp telegram_bot/env.example telegram_bot/.env
 ```
-*Bu buyruq `face_id_terminal` bazasi va barcha jadvallarni tekshiradi hamda standart admin foydalanuvchisini (`admin` / `admin123`) yaratadi.*
+
+`telegram_bot/.env` fayli ichidagi parametrlar:
+```env
+# Telegram bot tokeni (@BotFather orqali olinadi)
+TELEGRAM_BOT_TOKEN=8747973146:AAEJVvqSyPXtMBVwW8ncUiZHqfCM7udFZvM
+
+# Rasm va xabarlar boradigan guruh ID si (ixtiyoriy, masalan: -100123456789)
+TELEGRAM_CHAT_ID=
+
+# Asosiy adminlarning Telegram ID raqamlari (vergul bilan: 12345678,87654321)
+ADMIN_IDS=
+
+# Hikvision terminal sozlamalari
+HIKVISION_IP=192.168.11.151
+HIKVISION_USER=admin
+HIKVISION_PASSWORD=4UnsurAsr21$
+
+# Webhook qabul qiluvchi port (Hikvision shu portga so'rov yuboradi)
+PORT=8095
+
+# PostgreSQL ulanish sozlamalari
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_NAME=face_id_terminal
+DB_USER=root
+DB_PASS=1234
+
+# Ish vaqti parametrlari
+DEFAULT_START=08:00
+GRACE_MINUTES=0
+RETENTION_DAYS=180
+WEEKEND_DAYS=6
+TZ_NAME=Asia/Tashkent
+LOG_LEVEL=INFO
+```
 
 ---
 
-### 2-qadam: Telegram Bot va Hikvision tinglovchisini ishga tushirish
+### 2. Web Backend uchun: `web/.env.web`
+Namunadan nusxa ko'chirish:
+```powershell
+# Windows PowerShell:
+Copy-Item web\.env.web.example web\.env.web
 
-Terminal 1:
+# Linux / Mac:
+cp web/.env.web.example web/.env.web
+```
+
+`web/.env.web` fayli ichidagi parametrlar:
+```env
+APP_ENV=development
+SECRET_KEY=super-secret-key-change-in-production-davomat-2026
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=720
+
+# PostgreSQL ulanish sozlamalari (telegram_bot/.env bilan bir xil)
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_NAME=face_id_terminal
+DB_USER=root
+DB_PASS=1234
+DB_POOL_SIZE=3
+DB_MAX_OVERFLOW=2
+
+# Bot Token (Telegram Login widget tekshiruvi uchun)
+TELEGRAM_BOT_TOKEN=8747973146:AAEJVvqSyPXtMBVwW8ncUiZHqfCM7udFZvM
+
+# Vaqt mintaqasi
+TZ_NAME=Asia/Tashkent
+
+# Web server porti
+WEB_PORT=8090
+WEB_HOST=0.0.0.0
+```
+
+---
+
+## 🚀 Loyihani Noldan Ishga Tushirish Ketma-Ketligi
+
+Loyihani GitHub'dan klon qilgandan so'ng quyidagi 5 ta qadamni bajaring:
+
+### 1-qadam: Kutubxonalarni o'rnatish
+
+```powershell
+# Python kutubxonalari:
+pip install -r telegram_bot/requirements.txt
+pip install -r web/requirements.txt
+
+# Frontend kutubxonalari:
+cd frontend
+npm install
+cd ..
+```
+
+---
+
+### 2-qadam: `.env` fayllarini sozlash
+
+Yuqorida ko'rsatilganidek, `telegram_bot/.env` va `web/.env.web` fayllarini yaratib, o'zingizning DB va Telegram ma'lumotlaringizni kiriting.
+
+---
+
+### 3-qadam: Ma'lumotlar bazasini tayyorlash
+
+PostgreSQL ishlab turganiga ishonch hosil qiling va loyiha ildizida quyidagi buyruqni bering:
+```powershell
+python apply_schema.py
+```
+*Bu skript `face_id_terminal` bazasini tekshiradi, barcha jadvallarni yaratadi va standart admin (`admin` / `admin123`) akkauntini kiritadi.*
+
+---
+
+### 4-qadam: Telegram Bot va Webhook tinglovchisini ishga tushirish
+
+1-terminalda:
 ```powershell
 cd telegram_bot
 python main.py
 ```
-*Muvaffaqiyatli ishga tushganda:*
+*Kutilayotgan natija:*
 ```text
 INFO 🤖 Bot va server ishga tushdi...
 INFO Serving on http://0.0.0.0:8095
@@ -99,30 +210,21 @@ INFO Serving on http://0.0.0.0:8095
 
 ---
 
-### 3-qadam: Web Backend API ni ishga tushirish
+### 5-qadam: Web Backend va Frontendni ishga tushirish
 
-Terminal 2:
+2-terminalda (Backend API):
 ```powershell
 cd web
 uvicorn app.main:app --host 127.0.0.1 --port 8090 --reload
 ```
-*Muvaffaqiyatli ishga tushganda:*
-```text
-INFO: Uvicorn running on http://127.0.0.1:8090
-INFO: Application startup complete.
-```
 *Interaktiv API hujjatlari (Swagger): `http://127.0.0.1:8090/docs`*
 
----
-
-### 4-qadam: Frontend boshqaruv panelini ishga tushirish
-
-Terminal 3:
+3-terminalda (Frontend Dashboard):
 ```powershell
 cd frontend
 npm run dev
 ```
-*Brauzerda ochish:* **`http://localhost:3005`**
+*Brauzerda boshqaruv paneli:* **`http://localhost:3005`**
 
 ---
 
@@ -136,19 +238,13 @@ npm run dev
 
 ---
 
-## ⚙️ Sozlamalar fayli (`telegram_bot/.env`)
+## 📹 Hikvision Face ID Terminalini Sozlash
 
-Web ilova ham, bot ham sozlamalarni to'g'ridan-to'g'ri `telegram_bot/.env` dan o'qiydi:
-```env
-TELEGRAM_BOT_TOKEN=Sizning_Bot_Tokeningiz
-DB_HOST=127.0.0.1
-DB_PORT=5432
-DB_NAME=face_id_terminal
-DB_USER=root
-DB_PASS=1234
-PORT=8095
-DEFAULT_START=09:00
-GRACE_MINUTES=0
-RETENTION_DAYS=180
-TZ_NAME=Asia/Tashkent
-```
+Terminal yuzni aniqlaganida botga xabar yuborishi uchun terminal web-interfeysida quyidagicha sozlanadi:
+1. Brauzerda Hikvision terminal IP manziliga kiring (masalan: `http://192.168.11.151`).
+2. **Configuration** ➡️ **Network** ➡️ **Advanced Settings** ➡️ **HTTP Listening** (yoki **Surveillance Center**):
+   - **Destination IP:** Bot ishlayotgan kompyuter/server IP manzili (masalan: `192.168.11.100`)
+   - **Port:** `8095`
+   - **URL:** `/`
+   - **Protocol:** `HTTP`
+3. Sozlamani saqlang. Endi har safar xodim terminaldan o'tganida, terminal botga avtomatik POST so'rov yuboradi.
