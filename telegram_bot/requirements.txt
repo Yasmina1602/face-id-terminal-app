@@ -1,0 +1,7 @@
+python-telegram-bot[job-queue]>=21
+flask
+waitress
+requests
+psycopg2-binary
+python-dotenv
+openpyxl

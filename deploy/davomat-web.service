@@ -1,0 +1,18 @@
+[Unit]
+Description=Davomat Tizimi - Web API Servisi
+After=network.target
+
+[Service]
+WorkingDirectory=/home/norahara/ser/web
+ExecStart=/home/norahara/ser/web/venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8090 --workers 1
+EnvironmentFile=/home/norahara/ser/web/.env.web
+Restart=always
+User=norahara
+
+# Resurs cheklovlari (Yengillik qoidalari)
+MemoryMax=250M
+CPUQuota=50%
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

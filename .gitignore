@@ -1,0 +1,38 @@
+# Node.js dependencies
+node_modules/
+frontend/node_modules/
+
+# Python cache & virtual environments
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.env/
+py_3_10_lib/
+
+# Environment and secrets (xavfsizlik uchun sirlar gitga kirmaydi)
+.env
+telegram_bot/.env
+web/.env.web
+*.local
+
+# Build outputs
+dist/
+web/dist/
+frontend/dist/
+build/
+
+# IDE & OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+.DS_Store
+
+# Log files
+*.log

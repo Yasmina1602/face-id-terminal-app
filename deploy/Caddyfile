@@ -1,0 +1,17 @@
+# Caddy konfiguratsiyasi (Production uchun)
+# Domen nomingizni example.uz o'rniga yozing:
+davomat.example.uz {
+  encode zstd gzip
+
+  # FastAPI Web API proksi
+  handle /api/* {
+    reverse_proxy 127.0.0.1:8090
+  }
+
+  # React Frontend statik fayllari
+  handle {
+    root * /home/norahara/ser/web/dist
+    try_files {path} /index.html
+    file_server
+  }
+}
