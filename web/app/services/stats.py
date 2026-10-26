@@ -1,7 +1,7 @@
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, time as dt_time
 from typing import Dict, Any, List, Optional
-from sqlalchemy import func, text
+from sqlalchemy import func, text, case
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -92,9 +92,9 @@ def get_trend(db: Session, days: int = 30) -> list[dict]:
         db.query(
             DailyAttendance.day,
             func.count().label("total"),
-            func.sum(func.case((DailyAttendance.late_minutes > 0, 1), else_=0)).label("late_count"),
+            func.sum(case((DailyAttendance.late_minutes > 0, 1), else_=0)).label("late_count"),
             func.avg(
-                func.case(
+                case(
                     (DailyAttendance.first_in != None,
                      func.extract("hour", DailyAttendance.first_in) * 60 + func.extract("minute", DailyAttendance.first_in)),
                     else_=None
@@ -245,17 +245,17 @@ def get_arrival_histogram(db: Session, date_from: date, date_to: date) -> list[d
         if not first_in:
             continue
         t = first_in.time()
-        if t < time(7, 30):
+        if t < dt_time(7, 30):
             slots["07:30 gacha"] += 1
-        elif t < time(8, 0):
+        elif t < dt_time(8, 0):
             slots["07:30 - 08:00"] += 1
-        elif t < time(8, 30):
+        elif t < dt_time(8, 30):
             slots["08:00 - 08:30"] += 1
-        elif t < time(9, 0):
+        elif t < dt_time(9, 0):
             slots["08:30 - 09:00"] += 1
-        elif t < time(9, 30):
+        elif t < dt_time(9, 30):
             slots["09:00 - 09:30"] += 1
-        elif t < time(10, 0):
+        elif t < dt_time(10, 0):
             slots["09:30 - 10:00"] += 1
         else:
             slots["10:00 dan keyin"] += 1
