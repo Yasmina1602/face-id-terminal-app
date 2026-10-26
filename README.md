@@ -1,61 +1,73 @@
 # Davomat Tizimi: Hikvision Face ID + Telegram Bot + Web Dashboard
 
-Ushbu tizim Hikvision yuz tanish terminali hodisalarini qabul qilish, Telegram orqali bildirishnomalar yuborish, ma'lumotlarni PostgreSQL bazasida jamlash hamda real-vaqt rejimida statistikani zamonaviy Web interfeysida ko'rsatish uchun mo'ljallangan.
+Ushbu tizim Hikvision yuz tanish terminallari hodisalarini qabul qilish, ko'p filialli (Multi-Branch) arxitektura asosida ma'lumotlarni izolyatsiya qilish, Telegram orqali jonli bildirishnomalar yuborish, ma'lumotlarni PostgreSQL bazasida jamlash hamda real-vaqt rejimida statistikani zamonaviy Web interfeysida ko'rsatish uchun mo'ljallangan.
 
 ---
 
 ## 🏛️ Tizim Arxitekturasi
 
-Tizim modulli, mustaqil va mikro-servis arxitekturasi asosida qurilgan:
+Tizim modulli, mustaqil va ko'p filialli kengayuvchan mikro-servis arxitekturasi asosida qurilgan:
 
 ```
-+------------------------------------+
-|  Hikvision Face ID Terminali       |
-|  (IP: 192.168.11.151)             |
-+-----------------+------------------+
-                  |
-                  | 1. HTTP POST (Multipart: JSON + Yuz Rasmi)
-                  v
-+-----------------+------------------+
-|  Telegram Bot & Webhook Servisi    |  Port: 8095
-|  (Flask + python-telegram-bot)     |  Fayl: telegram_bot/main.py
-+--------+------------------+--------+
-         |                  |
-         | 2. sendPhoto     | 3. Xom attendance + Real-time daily_attendance
-         v                  v
-+--------+--------+  +------+------------------------------------------+
-| Telegram Guruhi |  |  PostgreSQL Ma'lumotlar Bazasi                  |
-| va Adminlar     |  |  (Baza: face_id_terminal, Port: 5432)           |
-+-----------------+  |  - attendance (xom hodisalar, rasm saqlanmaydi) |
-                     |  - daily_attendance (yig'ma kunlik natijalar)   |
-                     |  - employees, admins, chats, app_settings       |
-                     +----------------------+--------------------------+
-                                            ^
-                                            | 4. O'qish / Yangilash
-                                            v
-                     +----------------------+--------------------------+
-                     |  Web Backend API (FastAPI)                      |
-                     |  Port: 8090 | Fayl: web/app/main.py             |
-                     |  - REST API (/api/attendance, /stats, ...)      |
-                     |  - APScheduler (fon hisob-kitoblari)            |
-                     |  - Excel Eksport generatsiyasi                  |
-                     +----------------------+--------------------------+
-                                            ^
-                                            | 5. JSON / Polling (5s)
-                                            v
-                     +----------------------+--------------------------+
-                     |  Frontend Dashboard (React + TypeScript + Vite) |
-                     |  Port: 3005 | Papka: frontend/src/              |
-                     |  - Kunlik Davomat Jadvali (Real-vaqt)           |
-                     |  - Jonli o'tishlar lentasi, Trend va Heatmap    |
-                     |  - Xodimlar, Tabel va Tizim Sozlamalari         |
-                     +-------------------------------------------------+
+[ SHAHAR FILIALI ]                         [ URGUT FILIALI ]
+Face ID Terminal 1 (192.168.1.150)         Face ID Terminal 2 (192.168.2.150)
+        │                                          │
+        ▼ (POST /events/shahar)                    ▼ (POST /events/urgut)
+───────────────────────────────────────────────────────────────────────────
+                           INTERNET
+───────────────────────────────────────────────────────────────────────────
+                                │
+                                ▼
+         [ BULUTLI SERVER (Oq IP: 185.120.50.10) ]
+         ┌───────────────────────────────────────┐
+         │ UFW Firewall                          │
+         │   │                                   │
+         │   ▼                                   │
+         │ Hikvision Receiver (Port: 8095)       │
+         │   │ (JSON + Face Img)                 │
+         │   ├──► PostgreSQL Baza (5432)         │
+         │   │      (branch_code bo'yicha)       │
+         │   └──► Telegram Bot                   │
+         │          ├──► Shahar Guruhi           │
+         │          ├──► Urgut Guruhi            │
+         │          ├──► Shahar Admini (Shaxsiy) │
+         │          ├──► Urgut Admini (Shaxsiy)  │
+         │          └──► Bosh Direktor (Shaxsiy) │
+         │                                       │
+         │ FastAPI Backend (Port: 8090)          │
+         │ React Frontend (Port: 3005 yoki 8090) │
+         └───────────────────────────────────────┘
 ```
 
 ### Arxitektura Prinsiplari:
-1. **Alohida Jarayonlar:** Telegram bot va Web API mustaqil ishlaydi. Web server to'xtasa ham, terminaldan keladigan o'tishlar bot tomonidan uzluksiz qabul qilinadi va Telegramga jo'natiladi.
-2. **Real-Vaqtda Yangilanish (Zero-Lag):** Terminaldan o'tish sodir bo'lishi bilanoq, bot xom `attendance` jadvali bilan birga `daily_attendance` jadvalini ham darhol yangilaydi. Web panel har 5 soniyada yangilanishlarni avtomatik tortib oladi — qo'lda "Qayta hisoblash" tugmasini bosish shart emas!
-3. **Tartiblash:** Kunlik davomat jadvalida eng oxirgi kelgan yoki ketgan xodimlar avtomatik ravishda jadvalning eng yuqori qismida ko'rsatiladi.
+1. **Toza Modulli Tuzilish (Clean Architecture):** `telegram_bot` dasturi 1 ta fayldan qutqarilib, alohida mantiqiy modullarga (`config`, `database`, `repository`, `cache`, `notifier`, `receiver`, `reports`, `bot/`) bo'lindi.
+2. **Multi-Branch (Ko'p Filialli Izolyatsiya):** Bitta bot va bitta veb-sayt ishlaydi, biroq filiallar ma'lumotlari bir-biriga aslo ko'rinmaydi. Shahar o'tishlari Shahar guruhiga va adminiga, Urgut o'tishlari esa Urgut guruhiga va adminiga boradi. Bosh direktor esa barchasini jamlangan holda ko'ra oladi.
+3. **Kengayuvchanlik (+1 Filial):** Kelajakda yangi terminal (masalan, Samarqand) qo'shilganda kod o'zgarmaydi. Webhook dinamik tarzda `POST /events/{branch_code}` orqali yangi filialni qabul qilaveradi.
+4. **Real-Vaqtda Yangilanish (Zero-Lag):** Terminaldan o'tish sodir bo'lishi bilanoq xom `attendance` va yig'ma `daily_attendance` darhol hisoblanadi. Web dashboard yangi o'tishlarni avtomatik aks ettiradi.
+5. **Ofitsial iVMS-4200 Integratsiyasi:** Xodimlarni, ularning yuz rasmlarini bitta markaziy kompyuterdagi iVMS-4200 orqali boshqariladi va Cloud P2P orqali masofaviy terminallarga sinxronlashtiriladi.
+
+---
+
+## 📂 `telegram_bot` Modullar Tuzilishi
+
+```text
+telegram_bot/
+│
+├── config.py             # Barcha sozlamalar (.env), vaqt mintaqasi va yordamchilar
+├── database.py           # PostgreSQL connection pool va jadvallarni tekshirish (init_db)
+├── cache.py              # Xodimlar, adminlar, guruhlarning tezkor RAM keshi va sinxronizatsiyasi
+├── repository.py         # Ma'lumotlar bazasi so'rovlari (CRUD)
+├── notifier.py           # Telegramga rasmli xabarlarni jo'natish navbati (Queue + Worker)
+├── receiver.py           # Hikvision terminalidan JSON va suratlarni qabul qiluvchi HTTP server
+├── reports.py            # Matnli va Excel (.xlsx) hisobotlarini shakllantirish
+│
+├── bot/                  # Telegram Bot qismi
+│   ├── keyboards.py      # Barcha Reply va Inline tugmalar
+│   ├── handlers.py       # Bot komandalari, matn, callback va guruh hodisalari
+│   └── setup.py          # Telegram Application'ni yig'ish va rejalashtirilgan vazifalar
+│
+└── main.py               # Asosiy ishga tushiruvchi ixcham kirish nuqtasi (Entrypoint)
+```
 
 ---
 
@@ -64,81 +76,61 @@ Tizim modulli, mustaqil va mikro-servis arxitekturasi asosida qurilgan:
 | Servis | Port | Vazifasi |
 | :--- | :--- | :--- |
 | **PostgreSQL** | `5432` | Asosiy ma'lumotlar bazasi (`face_id_terminal`) |
-| **Telegram Bot / Webhook** | `8095` | Hikvision terminalidan POST qabul qilish |
-| **Web Backend (FastAPI)** | `8090` | REST API va hisobot xizmati |
-| **Frontend (Vite / React)** | `3005` | Veb boshqaruv paneli |
+| **Hikvision Receiver / Bot** | `8095` | Hikvision terminallaridan POST qabul qilish |
+| **Web Backend (FastAPI)** | `8090` | REST API, analitika va hisobot xizmati |
+| **Frontend (Vite / React)** | `3005` | Veb boshqaruv paneli (Dev server) |
 
 ---
 
 ## 📁 Konfiguratsiya Fayllari (`.env`)
 
-Loyiha xavfsizligi yuzasidan shaxsiy parollar va tokenlar Git omboriga yuklanmaydi. Loyihani yuklab olgan kishi quyidagi `.env` fayllarini namunalardan nusxa olib yaratishi kerak.
-
 ### 1. Telegram Bot uchun: `telegram_bot/.env`
-Namunadan nusxa ko'chirish:
 ```powershell
-# Windows PowerShell:
 Copy-Item telegram_bot\env.example telegram_bot\.env
-
-# Linux / Mac:
-cp telegram_bot/env.example telegram_bot/.env
 ```
 
-`telegram_bot/.env` fayli ichidagi parametrlar:
+`telegram_bot/.env` asosiy parametrlari:
 ```env
-# Telegram bot tokeni (@BotFather orqali olinadi)
 TELEGRAM_BOT_TOKEN=8747973146:AAEJVvqSyPXtMBVwW8ncUiZHqfCM7udFZvM
-
-# Rasm va xabarlar boradigan guruh ID si (ixtiyoriy, masalan: -100123456789)
 TELEGRAM_CHAT_ID=
-
-# Asosiy adminlarning Telegram ID raqamlari (vergul bilan: 12345678,87654321)
 ADMIN_IDS=
 
-# Hikvision terminal sozlamalari
 HIKVISION_IP=192.168.11.151
 HIKVISION_USER=admin
-HIKVISION_PASSWORD=4UnsurAsr21$
+HIKVISION_PASSWORD=parol_kiriting
 
-# Webhook qabul qiluvchi port (Hikvision shu portga so'rov yuboradi)
 PORT=8095
 
-# PostgreSQL ulanish sozlamalari
 DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_NAME=face_id_terminal
 DB_USER=root
 DB_PASS=1234
 
-# Ish vaqti parametrlari
-DEFAULT_START=08:00
+DEFAULT_START=09:00
 GRACE_MINUTES=0
 RETENTION_DAYS=180
 WEEKEND_DAYS=6
 TZ_NAME=Asia/Tashkent
 LOG_LEVEL=INFO
+
+# Terminaldan kelayotgan JSON ma'lumotlarini konsolda to'liq ko'rish (1 - yoqish, 0 - o'chirish)
+DEBUG_EVENTS=1
 ```
 
 ---
 
 ### 2. Web Backend uchun: `web/.env.web`
-Namunadan nusxa ko'chirish:
 ```powershell
-# Windows PowerShell:
 Copy-Item web\.env.web.example web\.env.web
-
-# Linux / Mac:
-cp web/.env.web.example web/.env.web
 ```
 
-`web/.env.web` fayli ichidagi parametrlar:
 ```env
 APP_ENV=development
 SECRET_KEY=super-secret-key-change-in-production-davomat-2026
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=720
 
-# PostgreSQL ulanish sozlamalari (telegram_bot/.env bilan bir xil)
 DB_HOST=127.0.0.1
 DB_PORT=5432
 DB_NAME=face_id_terminal
@@ -147,104 +139,70 @@ DB_PASS=1234
 DB_POOL_SIZE=3
 DB_MAX_OVERFLOW=2
 
-# Bot Token (Telegram Login widget tekshiruvi uchun)
 TELEGRAM_BOT_TOKEN=8747973146:AAEJVvqSyPXtMBVwW8ncUiZHqfCM7udFZvM
-
-# Vaqt mintaqasi
 TZ_NAME=Asia/Tashkent
 
-# Web server porti
 WEB_PORT=8090
 WEB_HOST=0.0.0.0
 ```
 
 ---
 
-## 🚀 Loyihani Noldan Ishga Tushirish Ketma-Ketligi
-
-Loyihani GitHub'dan klon qilgandan so'ng quyidagi 5 ta qadamni bajaring:
+## 🚀 Loyihani Ishga Tushirish Ketma-Ketligi
 
 ### 1-qadam: Kutubxonalarni o'rnatish
-
 ```powershell
-# Python kutubxonalari:
 pip install -r telegram_bot/requirements.txt
 pip install -r web/requirements.txt
 
-# Frontend kutubxonalari:
 cd frontend
 npm install
 cd ..
 ```
 
----
-
-### 2-qadam: `.env` fayllarini sozlash
-
-Yuqorida ko'rsatilganidek, `telegram_bot/.env` va `web/.env.web` fayllarini yaratib, o'zingizning DB va Telegram ma'lumotlaringizni kiriting.
-
----
-
-### 3-qadam: Ma'lumotlar bazasini tayyorlash
-
-PostgreSQL ishlab turganiga ishonch hosil qiling va loyiha ildizida quyidagi buyruqni bering:
+### 2-qadam: Ma'lumotlar bazasini tayyorlash
 ```powershell
 python apply_schema.py
 ```
-*Bu skript `face_id_terminal` bazasini tekshiradi, barcha jadvallarni yaratadi va standart admin (`admin` / `admin123`) akkauntini kiritadi.*
 
----
-
-### 4-qadam: Telegram Bot va Webhook tinglovchisini ishga tushirish
-
-1-terminalda:
+### 3-qadam: Telegram Bot va Webhook tinglovchisini ishga tushirish (1-terminal)
 ```powershell
 cd telegram_bot
 python main.py
 ```
-*Kutilayotgan natija:*
-```text
-INFO 🤖 Bot va server ishga tushdi...
-INFO Serving on http://0.0.0.0:8095
-```
 
----
-
-### 5-qadam: Web Backend va Frontendni ishga tushirish
-
-2-terminalda (Backend API):
+### 4-qadam: Web Backend API ni ishga tushirish (2-terminal)
 ```powershell
 cd web
 uvicorn app.main:app --host 127.0.0.1 --port 8090 --reload
 ```
-*Interaktiv API hujjatlari (Swagger): `http://127.0.0.1:8090/docs`*
+*API hujjatlari (Swagger):* `http://127.0.0.1:8090/docs`
 
-3-terminalda (Frontend Dashboard):
+### 5-qadam: Web Frontendni ishga tushirish (3-terminal)
 ```powershell
 cd frontend
 npm run dev
 ```
-*Brauzerda boshqaruv paneli:* **`http://localhost:3005`**
-
----
-
-## 🔐 Standart Kirish Ma'lumotlari
-
-- **Panel manzili:** `http://localhost:3005`
-- **Login:** `admin`
-- **Parol:** `admin123`
-
-*(Tizimga kirgach, «Sozlamalar» ➡️ «Adminlar va Rollar» bo'limida yangi adminlar qo'shishingiz yoki parolni yangilashingiz mumkin).*
+*Veb panel:* **`http://localhost:3005`** (Standart login: `admin` / parol: `admin123`)
 
 ---
 
 ## 📹 Hikvision Face ID Terminalini Sozlash
 
-Terminal yuzni aniqlaganida botga xabar yuborishi uchun terminal web-interfeysida quyidagicha sozlanadi:
-1. Brauzerda Hikvision terminal IP manziliga kiring (masalan: `http://192.168.11.151`).
-2. **Configuration** ➡️ **Network** ➡️ **Advanced Settings** ➡️ **HTTP Listening** (yoki **Surveillance Center**):
-   - **Destination IP:** Bot ishlayotgan kompyuter/server IP manzili (masalan: `192.168.11.100`)
+Terminal yuzni aniqlaganda serverga ma'lumot uzatishi uchun terminal brauzer interfeysida:
+1. `http://<TERMINAL_IP>` manziliga kiring.
+2. **Configuration** ➡️ **Network** ➡️ **Advanced Settings** ➡️ **HTTP Listening**:
+   - **Destination IP:** Server IP manzili (masalan: `185.120.50.10` yoki lokal `192.168.1.100`)
    - **Port:** `8095`
-   - **URL:** `/`
+   - **URL:** `/events/shahar` (yoki `/events/urgut`)
    - **Protocol:** `HTTP`
-3. Sozlamani saqlang. Endi har safar xodim terminaldan o'tganida, terminal botga avtomatik POST so'rov yuboradi.
+3. Sozlamani saqlang. Har safar xodim o'tganda terminal avtomatik ravishda JSON va olingan fotosuratni serverga yuboradi.
+
+---
+
+## 🛠️ Oxirgi Yangilanishlar va Tuzatishlar
+- **CORS & Credentials:** Backendda brauzerlar talabiga mos ravishda domen va portlar aniq ko'rsatilib, kirishdagi loading xatosi to'liq bartaraf etildi.
+- **Statistika va Trendlar:** Backenddagi `get_trend` va `get_arrival_histogram` hisob-kitoblaridagi xatoliklar tuzatilib, Dashboarddagi trend grafigi, xodimlar reytingi va issiqlik xaritasi (Heatmap) to'liq ishga tushirildi.
+- **Client Timeout:** Frontend API klientiga tarmoq qotib qolmasligi uchun 10 soniyalik xavfsiz timeout kiritildi.
+- **DEBUG_EVENTS:** Terminaldan keladigan JSON voqealarni real-vaqtda konsolda kuzatish imkoniyati qo'shildi.
+- **MASTER_PROMPT:** Loyihaning ko'p filialli to'liq texnik topshiriq hujjati `MASTER_PROMPT.md` fayliga joylashtirildi.

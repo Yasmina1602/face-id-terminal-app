@@ -36,3 +36,7 @@ Thumbs.db
 
 # Log files
 *.log
+
+# Master Prompt & Arch specs
+MASTER_PROMPT.md
+
